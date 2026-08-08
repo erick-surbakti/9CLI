@@ -10,7 +10,7 @@ explicit approval first**.
 
 ---
 
-## Table of Contents
+## Table of Contents TOC
 
 - [Features](#features)
 - [How it was built (tech stack)](#how-it-was-built-tech-stack)
