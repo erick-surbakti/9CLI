@@ -17,6 +17,7 @@ type Client struct {
 	apiKey  string
 	baseURL string
 	model   string
+	tools   []Tool
 	http    *http.Client
 }
 
@@ -42,12 +43,18 @@ func (c *Client) SetModel(model string) {
 	c.model = model
 }
 
+// SetTools enables tool calling for subsequent requests.
+func (c *Client) SetTools(tools []Tool) {
+	c.tools = tools
+}
+
 // Stream sends a chat completion request and returns a channel of stream events.
 func (c *Client) Stream(ctx context.Context, messages []Message) (<-chan StreamEvent, error) {
 	reqBody := ChatRequest{
 		Model:    c.model,
 		Messages: messages,
 		Stream:   true,
+		Tools:    c.tools,
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -154,10 +161,20 @@ func parseHTTPError(resp *http.Response) error {
 	}
 }
 
+// toolCallDelta is an incremental update to a tool call being streamed.
+type toolCallDelta struct {
+	index int
+	id    string
+	name  string
+	args  string
+}
+
 // readSSE parses Server-Sent Events from the response body.
 func readSSE(ctx context.Context, r io.Reader, ch chan<- StreamEvent) error {
 	scanner := newLineScanner(r)
 	var totalContent strings.Builder
+	accCalls := map[int]*accToolCall{}
+	var fixedCalls []ToolCall
 
 	for {
 		select {
@@ -168,10 +185,7 @@ func readSSE(ctx context.Context, r io.Reader, ch chan<- StreamEvent) error {
 
 		line, err := scanner.ReadLine()
 		if err == io.EOF {
-			if totalContent.Len() == 0 {
-				return fmt.Errorf("received empty response from model")
-			}
-			ch <- StreamEvent{Done: true}
+			ch <- StreamEvent{Done: true, ToolCalls: finalizeCalls(accCalls, fixedCalls)}
 			return nil
 		}
 		if err != nil {
@@ -188,14 +202,11 @@ func readSSE(ctx context.Context, r io.Reader, ch chan<- StreamEvent) error {
 
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
-			if totalContent.Len() == 0 {
-				return fmt.Errorf("received empty response from model")
-			}
-			ch <- StreamEvent{Done: true}
+			ch <- StreamEvent{Done: true, ToolCalls: finalizeCalls(accCalls, fixedCalls)}
 			return nil
 		}
 
-		token, parseErr := parseStreamChunk(data)
+		token, deltas, fixed, parseErr := parseStreamChunk(data)
 		if parseErr != nil {
 			return fmt.Errorf("malformed response: %w", parseErr)
 		}
@@ -203,39 +214,117 @@ func readSSE(ctx context.Context, r io.Reader, ch chan<- StreamEvent) error {
 			totalContent.WriteString(token)
 			ch <- StreamEvent{Token: token}
 		}
+		for _, d := range deltas {
+			acc := accCalls[d.index]
+			if acc == nil {
+				acc = &accToolCall{}
+				accCalls[d.index] = acc
+			}
+			if d.id != "" {
+				acc.id = d.id
+			}
+			if d.name != "" {
+				acc.name = d.name
+			}
+			acc.args.WriteString(d.args)
+		}
+		if len(fixed) > 0 {
+			fixedCalls = fixed
+		}
 	}
 }
 
-func parseStreamChunk(data string) (string, error) {
+// accToolCall accumulates partial tool-call fragments from the stream.
+type accToolCall struct {
+	id   string
+	name string
+	args strings.Builder
+}
+
+func finalizeCalls(acc map[int]*accToolCall, fixed []ToolCall) []ToolCall {
+	if len(fixed) > 0 {
+		return fixed
+	}
+	if len(acc) == 0 {
+		return nil
+	}
+	out := make([]ToolCall, 0, len(acc))
+	for i := 0; i < len(acc); i++ {
+		a, ok := acc[i]
+		if !ok {
+			continue
+		}
+		args := a.args.String()
+		if strings.TrimSpace(args) == "" {
+			args = "{}"
+		}
+		out = append(out, ToolCall{
+			ID:   a.id,
+			Type: "function",
+			Function: ToolCallFunction{
+				Name:      a.name,
+				Arguments: json.RawMessage(args),
+			},
+		})
+	}
+	return out
+}
+
+func parseStreamChunk(data string) (string, []toolCallDelta, []ToolCall, error) {
 	var chunk struct {
 		Choices []struct {
 			Delta struct {
-				Content string `json:"content"`
+				Content   string `json:"content"`
+				ToolCalls []struct {
+					Index    int    `json:"index"`
+					ID       string `json:"id"`
+					Type     string `json:"type"`
+					Function struct {
+						Name      string `json:"name"`
+						Arguments string `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
 			} `json:"delta"`
 			Message struct {
-				Content string `json:"content"`
+				Content   string     `json:"content"`
+				ToolCalls []ToolCall `json:"tool_calls"`
 			} `json:"message"`
 			Text string `json:"text"`
 		} `json:"choices"`
 	}
 
 	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-		return "", err
+		return "", nil, nil, err
 	}
 
 	if len(chunk.Choices) == 0 {
-		return "", nil
+		return "", nil, nil, nil
 	}
 
 	choice := chunk.Choices[0]
 	if choice.Delta.Content != "" {
-		return choice.Delta.Content, nil
+		return choice.Delta.Content, nil, nil, nil
+	}
+	if len(choice.Delta.ToolCalls) > 0 {
+		var deltas []toolCallDelta
+		for _, tc := range choice.Delta.ToolCalls {
+			deltas = append(deltas, toolCallDelta{
+				index: tc.Index,
+				id:    tc.ID,
+				name:  tc.Function.Name,
+				args:  tc.Function.Arguments,
+			})
+		}
+		return "", deltas, nil, nil
+	}
+	if len(choice.Message.ToolCalls) > 0 {
+		return "", nil, choice.Message.ToolCalls, nil
 	}
 	if choice.Message.Content != "" {
-		return choice.Message.Content, nil
+		return choice.Message.Content, nil, nil, nil
 	}
 	if choice.Text != "" {
-		return choice.Text, nil
+		return choice.Text, nil, nil, nil
 	}
-	return "", nil
+	return "", nil, nil, nil
 }

@@ -22,7 +22,10 @@ type Config struct {
 }
 
 // Load reads configuration from environment variables and validates required fields.
+// Variables in a .env file (current directory) are loaded first unless already set.
 func Load() (Config, error) {
+	loadDotEnv()
+
 	cfg := Config{
 		APIKey:  strings.TrimSpace(os.Getenv("NINEROUTER_API_KEY")),
 		BaseURL: strings.TrimSpace(os.Getenv("NINEROUTER_BASE_URL")),
