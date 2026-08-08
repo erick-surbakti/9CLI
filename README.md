@@ -64,7 +64,7 @@ dependencies — that is why it starts in a fraction of a second.
 
 ## How it works (architecture & process)
 
-### High-level data flow
+### High-level data flow.
 
 ```
              ┌──────────────────────────────────────────────┐
