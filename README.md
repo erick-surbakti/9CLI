@@ -4,7 +4,7 @@ A lightweight, local-first **terminal AI assistant** built in Go. It runs a mode
 terminal UI (TUI) for chatting with LLMs and acting on your filesystem — with
 **9Router** acting purely as the OpenAI-compatible API gateway.
 
-You talk to it in natural language. It can read your files, search your project,
+You talk to it in nart language. It can read your files, search your project,
 edit code, and run shell commands — **every write and command requires your
 explicit approval first**.
 
