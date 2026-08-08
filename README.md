@@ -8,8 +8,6 @@ You talk to it in natural language. It can read your files, search your project,
 edit code, and run shell commands — **every write and command requires your
 explicit approval first**.
 
-
----
 ---
 
 ## Table of Contents
