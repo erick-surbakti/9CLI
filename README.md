@@ -1,4 +1,4 @@
-# AI CLI — Local Terminal Chatbot & Agent for 9-Router or Other BYOK 
+# AI CLI — Local Terminal Chatbot & Agent for 9-Router or Other BYOK from other AI Services
 
 A lightweight, local-first **terminal AI assistant** built in Go. It runs a modern
 terminal UI (TUI) for chatting with LLMs and acting on your filesystem — with
