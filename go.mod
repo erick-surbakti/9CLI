@@ -29,3 +29,4 @@ require (
 
 //go
 //gocooldown
+//golol
