@@ -120,7 +120,7 @@ dependencies — that is why it starts in a fraction of a second.
 6. **Done** — when no more tool calls come back, the final answer is committed
    to the session and the UI returns to idle.
 
-### The multi-turn agent loop
+### The multi-turn agent loop-ed
 
 ```
 model request ──► stream ──► text? ──► show to user ──► commit ──► idle
