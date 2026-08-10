@@ -30,3 +30,4 @@ require (
 //go
 //gocooldown
 //golol
+//goolok
