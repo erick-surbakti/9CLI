@@ -359,6 +359,7 @@ func mustArgs(m map[string]string) json.RawMessage {
 	return b
 }
 
+//all comment or feature in here
 func helpText() string {
 	return strings.TrimSpace(`Available commands:
 
