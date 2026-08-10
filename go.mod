@@ -28,3 +28,4 @@ require (
 )
 
 //go
+//gocooldown
