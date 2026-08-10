@@ -236,3 +236,5 @@ func (a *Agent) searchFiles(query, path string) (string, bool) {
 	}
 	return fmt.Sprintf("%d match(es) for %q in %s:\n%s", matches, query, root, b.String()), false
 }
+
+// focused on the toolspec~
