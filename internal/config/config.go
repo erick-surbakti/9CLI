@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 )
-
+//model can be changed !
 const (
 	defaultBaseURL = "http://localhost:20128/v1"
 	defaultModel   = "gpt-5"
